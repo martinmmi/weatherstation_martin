@@ -2,15 +2,19 @@
 //////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////
 
-#include "Arduino.h"
+#include <Arduino.h>
+#include <Preferences.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BME280.h>
-#include "TFT_eSPI.h" /* Please use the TFT library provided in the library. */
+#include <TFT_eSPI.h>           /* Please use the TFT library provided in the library. */
 
 #define SEALEVELPRESSURE_HPA (1027)                  // default 1013.25
 
 #define BUTTON_PIN                    35
+
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  1500        /* Time ESP32 will go to sleep (in seconds) */
 
 float temperature, minTemperature, maxTemperature, lastTemperature;
 float pressure;
@@ -27,12 +31,13 @@ char buf_altitude[20] = {' '};
 char buf_humidity[20] = {' '};
 char buf_minHumidity[20] = {' '};
 char buf_maxHumidity[20] = {' '};
-char buf_reminingTime[20] = {' '};
+char buf_countUntilClear[20] = {' '};
 
 Adafruit_BME280 bme; // I2C
 
+Preferences eeprom;            //Initiate Flash Memory
+
 int step = 1;
-int reminingTime = 0;
 int waitShort = 2500;
 int waitShortRandom = 1250;
 int waitLong = 3500;
@@ -40,11 +45,10 @@ int waitLongRandom = 1500;
 int waitRemining = 500;
 int waitReminingRandom = 250;
 int debounceTime = 300;
-int displayOffTime = 120000;
-int calcTime = 300000;
-int serialTime = 1000;
-int readSensorTime = 500;
-int clearTime = 86400000;
+int displayOffTime = 300000;
+int serialTime = 10000;
+int readSensorTime = 10000;
+int countUntilClear = 24;
 
 unsigned long lastReadSensor = 0;
 unsigned long lastDisplayPrint = 0;
@@ -52,16 +56,12 @@ unsigned long lastDisplayPart = 0;
 unsigned long lastSerialPrint = 0;
 unsigned long lastButtonChanged = 0;
 unsigned long lastTurnOff = 0;
-unsigned long lastClearMinMax = 0;
-unsigned long lastCalc = 0;
 
-bool initSensor = HIGH;
-bool initDisplay = HIGH;
-bool initSerial = HIGH;
-bool buttonState = LOW;
-bool lastButtonState = LOW;
-bool buttonAction = LOW; 
-bool turnOff = LOW;
+bool initSensor = true;
+bool initDisplay = true;
+bool initSerial = true;
+bool buttonState = false;
+bool buttonInterrupt = false;
 
 //////////////////////////////////////////////////////////////////////
 
@@ -78,6 +78,10 @@ void setup() {
   
   cpu_frequency = getCpuFrequencyMhz();
   Serial.println(cpu_frequency);
+
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_0,0); //1 = true, 0 = false
+
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 
   pinMode(BUTTON_PIN, INPUT);
 
@@ -99,18 +103,16 @@ void setup() {
     while (1);
   }
 
-  // Read Values for initialization Min Max
-  temperature = bme.readTemperature() + 1;
-  minTemperature = temperature;
-  maxTemperature = temperature;
+  // Read Values for initialization Values
+  eeprom.begin("values", false); 
+  minTemperature = eeprom.getFloat("minTemp", bme.readTemperature() + 1);
+  maxTemperature = eeprom.getFloat("maxTemp", bme.readTemperature() + 1);
+  minHumidity = eeprom.getFloat("minHumi", bme.readHumidity());
+  maxHumidity = eeprom.getFloat("maxHumi", bme.readHumidity());
+  countUntilClear = eeprom.getInt("countUntilClear", countUntilClear);
+  buttonInterrupt = eeprom.getBool("buttonInterrupt", false);
+  eeprom.end();
 
-  // Read Values for initialization Min Max
-  humidity = bme.readHumidity();
-  minHumidity = humidity;
-  maxHumidity = humidity;
-
-  // First Calculate the remining time for clear Min Max 
-  reminingTime = round(((((millis() - lastClearMinMax) - clearTime) * (-1)) / 3600000));
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -118,35 +120,50 @@ void setup() {
 void loop() {
 
   /////////// Read Sensor Function ///////////
-  if ((millis() - lastReadSensor > readSensorTime) || (initSensor == HIGH)) {
+  if ((millis() - lastReadSensor > readSensorTime) || (initSensor == true)) {
     temperature = bme.readTemperature() + 1;
     pressure = bme.readPressure() / 100.0F;
     altitude = bme.readAltitude(SEALEVELPRESSURE_HPA);
     humidity = bme.readHumidity();
 
     // Clear Min Max after 24h
-    if (millis() - lastClearMinMax > clearTime) {
-      minTemperature = temperature;
-      maxTemperature = temperature;
-      minHumidity = humidity;
-      maxHumidity = humidity;
-
-      lastClearMinMax = millis();
+    if (countUntilClear == 0) {
+      countUntilClear = 24;
+      eeprom.begin("values", false); 
+      eeprom.putFloat("minTemp", temperature);    
+      eeprom.putFloat("maxTemp", temperature);  
+      eeprom.putFloat("minHumi", humidity);  
+      eeprom.putFloat("maxHumi", humidity);  
+      eeprom.putInt("countUntilClear", countUntilClear);  
+      eeprom.end();
     }
 
     // Calculate Min Max
     if ((temperature < lastTemperature) && (temperature < minTemperature)){
       minTemperature = temperature;
+      eeprom.begin("values", false); 
+      eeprom.putFloat("minTemp", minTemperature); 
+      Serial.print("YES!");     
+      eeprom.end();
     }
     if ((temperature > lastTemperature) && (temperature > maxTemperature)) {
       maxTemperature = temperature;
+      eeprom.begin("values", false);    
+      eeprom.putFloat("maxTemp", maxTemperature);  
+      eeprom.end();
     }
 
     if ((humidity < lastHumidity) && (humidity < minHumidity)){
       minHumidity = humidity;
+      eeprom.begin("values", false); 
+      eeprom.putFloat("minHumi", minHumidity);  
+      eeprom.end();
     }
     if ((humidity > lastHumidity) && (humidity > maxHumidity)) {
       maxHumidity = humidity;
+      eeprom.begin("values", false); 
+      eeprom.putFloat("maxHumi", maxHumidity);  
+      eeprom.end();
     }
 
     lastTemperature = temperature;
@@ -154,15 +171,16 @@ void loop() {
 
 
 
-    initSensor = LOW;
+    initSensor = false;
     lastReadSensor = millis();
   }
 
   /////////// Serial Print Function ///////////
 
   
-  if ((millis() - lastSerialPrint > serialTime) || (initSerial == HIGH)) {
+  if ((millis() - lastSerialPrint > serialTime) || (initSerial == true)) {
 
+    Serial.println("");
     Serial.print("Temperature = "); Serial.print(temperature); Serial.println(" *C");
     Serial.print("TemperatureMin = "); Serial.print(minTemperature); Serial.println(" *C");
     Serial.print("TemperatureMax = "); Serial.print(maxTemperature); Serial.println(" *C");
@@ -171,16 +189,17 @@ void loop() {
     Serial.print("Humidity = "); Serial.print(humidity); Serial.println(" %");
     Serial.print("HumidityMin = "); Serial.print(minHumidity); Serial.println(" %");
     Serial.print("HumidityMax = "); Serial.print(maxHumidity); Serial.println(" %");
+    Serial.print("countUntilClear = "); Serial.print(countUntilClear); Serial.println(" h");
     Serial.println("");
 
-    initSerial = LOW;
+    initSerial = false;
     lastSerialPrint = millis();
   }
   
   
   
   /////////// Print Display Function ///////////
-  if ((millis() - lastDisplayPrint > 1) || (initDisplay == HIGH)) {
+  if ((millis() - lastDisplayPrint > 1) || (initDisplay == true)) {
 
     // Temperature
     if ((millis() - lastDisplayPart > waitLong + random(waitLongRandom)) && (step == 1)) {
@@ -272,9 +291,9 @@ void loop() {
 
     // Remining Time until Min Max is cleaned
     if ((millis() - lastDisplayPart > waitRemining + random(waitReminingRandom)) && (step == 8)) {
-      sprintf (buf_reminingTime, "%d", reminingTime);
+      sprintf (buf_countUntilClear, "%d", countUntilClear);
       tft.fillScreen(TFT_BLACK);
-      tft.drawString(buf_reminingTime, 20, 20, 6); tft.drawString("h", 174, 38, 4); 
+      tft.drawString(buf_countUntilClear, 20, 20, 6); tft.drawString("h", 174, 38, 4); 
       step = 9;
       lastDisplayPart = millis();
     }
@@ -286,50 +305,50 @@ void loop() {
       step = 1;
     }
 
-    initDisplay = LOW;
+    initDisplay = false;
   }
 
   // Read Button and do anything
   if (millis() - lastButtonChanged > debounceTime) {
-  buttonState = digitalRead(BUTTON_PIN); 
-
-    if (buttonState != lastButtonState) {
-      lastButtonChanged = millis();
-      lastButtonState = buttonState;
-
-      if (buttonState == LOW) {
-        //Serial.println("Button released");
-        buttonAction = !buttonAction;
-
-        if (buttonAction == HIGH) {
-          Serial.println("HIGH");
-          tft.writecommand(0x11);
-          digitalWrite(TFT_BL, HIGH); // turns on backlight
-          turnOff = LOW;
-          lastTurnOff = millis();
-        }
-        if (buttonAction == LOW) {
-          Serial.println("LOW");
-          tft.writecommand(0x10); // Sleep
-          digitalWrite(TFT_BL, LOW); // turns off backlight
-          turnOff = HIGH;
-        }
-      }
+    buttonState = digitalRead(BUTTON_PIN);
+    lastButtonChanged = millis(); 
+    
+    if (buttonState == false) {
+      buttonInterrupt = true;
+      eeprom.begin("values", false); 
+      eeprom.putBool("buttonInterrupt", buttonInterrupt);    
+      eeprom.end();
+      
+      tft.fillScreen(TFT_BLACK);
+      Serial.println("Going to sleep now");
+      esp_deep_sleep_start();
     }
   }
 
   // Function turn off the Display after some time
-  if ((millis() - lastTurnOff > displayOffTime) && (turnOff == LOW)) {
-    tft.writecommand(0x10); // Sleep
-    digitalWrite(TFT_BL, LOW); // turns off backlight
-    turnOff = HIGH;
-    buttonAction = !buttonAction;
+  if ((millis() - lastTurnOff > displayOffTime) && (buttonInterrupt == true)) {
+
+    buttonInterrupt = false;
+    eeprom.begin("values", false); 
+    eeprom.putBool("buttonInterrupt", buttonInterrupt);    
+    eeprom.end();
+
+    tft.fillScreen(TFT_BLACK);
+    Serial.println("Going to sleep now");
+    esp_deep_sleep_start();
   }
 
-  // Calculate the remining time for clear Min Max
-  if (millis() - lastCalc > calcTime) {
-    reminingTime = round(((((millis() - lastClearMinMax) - clearTime) * (-1)) / 3600000));
-    lastCalc = millis();
+  // Function turn off the Display after some time
+  if ((millis() - lastTurnOff > displayOffTime) && (buttonInterrupt == false)) {
+
+    countUntilClear = countUntilClear - 0.5;
+    eeprom.begin("values", false); 
+    eeprom.putInt("countUntilClear", countUntilClear);  
+    eeprom.end();
+
+    tft.fillScreen(TFT_BLACK);
+    Serial.println("Going to sleep now");
+    esp_deep_sleep_start();
   }
 }
 
