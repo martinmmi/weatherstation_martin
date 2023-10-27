@@ -13,8 +13,8 @@
 
 #define BUTTON_PIN                    35
 
-#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  1500        /* Time ESP32 will go to sleep (in seconds) */
+#define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  3540        /* Time ESP32 will go to sleep (in seconds) */
 
 float temperature, minTemperature, maxTemperature, lastTemperature;
 float pressure;
@@ -45,7 +45,7 @@ int waitLongRandom = 1500;
 int waitRemining = 500;
 int waitReminingRandom = 250;
 int debounceTime = 300;
-int displayOffTime = 300000;
+int displayOffTime = 60000;
 int serialTime = 10000;
 int readSensorTime = 10000;
 int countUntilClear = 24;
@@ -156,7 +156,8 @@ void loop() {
     if ((humidity < lastHumidity) && (humidity < minHumidity)){
       minHumidity = humidity;
       eeprom.begin("values", false); 
-      eeprom.putFloat("minHumi", minHumidity);  
+      eeprom.putFloat("minHumi", minHumidity);
+      Serial.print("YES!");   
       eeprom.end();
     }
     if ((humidity > lastHumidity) && (humidity > maxHumidity)) {
@@ -341,7 +342,7 @@ void loop() {
   // Function turn off the Display after some time
   if ((millis() - lastTurnOff > displayOffTime) && (buttonInterrupt == false)) {
 
-    countUntilClear = countUntilClear - 0.5;
+    countUntilClear = countUntilClear - 1;
     eeprom.begin("values", false); 
     eeprom.putInt("countUntilClear", countUntilClear);  
     eeprom.end();
