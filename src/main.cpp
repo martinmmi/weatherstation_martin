@@ -105,8 +105,10 @@ void setup() {
   eeprom.begin("values", false); 
   minTemperature = eeprom.getFloat("minTemp", temperature);
   maxTemperature = eeprom.getFloat("maxTemp", temperature);
+  lastTemperature = eeprom.getFloat("lastTemperature", temperature);
   minHumidity = eeprom.getFloat("minHumi", humidity);
   maxHumidity = eeprom.getFloat("maxHumi", humidity);
+  lastHumidity = eeprom.getFloat("lastHumidity", humidity);
   countUntilClear = eeprom.getInt("countUntilClear", countUntilClear);
   eeprom.end();
 
@@ -123,36 +125,39 @@ void setup() {
   }
 
   // Calculate Min Max
-  if ((temperature < lastTemperature) && (temperature < minTemperature)){
+  if ((temperature <= lastTemperature) && (temperature <= minTemperature)){
     minTemperature = temperature;
     eeprom.begin("values", false); 
     eeprom.putFloat("minTemp", minTemperature); 
     Serial.print("YES!");     
     eeprom.end();
   }
-  if ((temperature > lastTemperature) && (temperature > maxTemperature)) {
+  if ((temperature >= lastTemperature) && (temperature >= maxTemperature)) {
     maxTemperature = temperature;
     eeprom.begin("values", false);    
     eeprom.putFloat("maxTemp", maxTemperature);  
     eeprom.end();
   }
 
-  if ((humidity < lastHumidity) && (humidity < minHumidity)){
+  if ((humidity <= lastHumidity) && (humidity <= minHumidity)){
     minHumidity = humidity;
     eeprom.begin("values", false); 
     eeprom.putFloat("minHumi", minHumidity);
     Serial.print("YES!");   
     eeprom.end();
   }
-  if ((humidity > lastHumidity) && (humidity > maxHumidity)) {
+  if ((humidity >= lastHumidity) && (humidity >= maxHumidity)) {
     maxHumidity = humidity;
     eeprom.begin("values", false); 
     eeprom.putFloat("maxHumi", maxHumidity);  
     eeprom.end();
   }
 
-  lastTemperature = temperature;
-  lastHumidity = humidity;
+  eeprom.begin("values", false); 
+  eeprom.putFloat("lastTemperature", temperature); 
+  eeprom.putFloat("lastHumidity", humidity);   
+  eeprom.end();
+
 
   Serial.println("");
   Serial.print("Temperature = "); Serial.print(temperature); Serial.println(" *C");
@@ -181,7 +186,7 @@ void loop() {
     int temperature_fra = (int)temperature_float;
     sprintf (buf_temperature, "%d.%d", temperature_int, temperature_fra);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_temperature, 20, 20, 6); tft.drawString(".", 180, 8, 6); tft.drawString("C", 194, 38, 4); 
+    tft.drawString(buf_temperature, 15, 20, 6); tft.drawString(".", 181, 8, 6); tft.drawString("C", 194, 38, 4); 
     step = 2;
     lastDisplayPart = millis();
   }
@@ -193,7 +198,7 @@ void loop() {
     int minTemperature_fra = (int)minTemperature_float;
     sprintf (buf_minTemperature, "%d.%d", minTemperature_int, minTemperature_fra);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_minTemperature, 20, 20, 6); tft.drawString(".", 180, 8, 6); tft.drawString("C", 194, 38, 4); 
+    tft.drawString(buf_minTemperature, 15, 20, 6); tft.drawString(".", 181, 8, 6); tft.drawString("C", 194, 38, 4); 
     tft.drawString("min", 120, 80, 4);
     step = 3;
     lastDisplayPart = millis();
@@ -206,7 +211,7 @@ void loop() {
     int maxTemperature_fra = (int)maxTemperature_float;
     sprintf (buf_maxTemperature, "%d.%d", maxTemperature_int, maxTemperature_fra);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_maxTemperature, 20, 20, 6); tft.drawString(".", 180, 8, 6); tft.drawString("C", 194, 38, 4); 
+    tft.drawString(buf_maxTemperature, 15, 20, 6); tft.drawString(".", 181, 8, 6); tft.drawString("C", 194, 38, 4); 
     tft.drawString("max", 120, 80, 4);
     step = 4;
     lastDisplayPart = millis();
@@ -219,7 +224,7 @@ void loop() {
     int pressure_fra = (int)pressure_float;
     sprintf (buf_pressure, "%d.%d", pressure_int, pressure_fra);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_pressure, 20, 20, 6); tft.drawString("hPa", 174, 38, 4); 
+    tft.drawString(buf_pressure, 15, 20, 6); tft.drawString("hPa", 194, 38, 4); 
     step = 5;
     lastDisplayPart = millis();
   }
@@ -231,7 +236,7 @@ void loop() {
     int humidity_fra = (int)humidity_float;
     sprintf (buf_humidity, "%d.%d", humidity_int, humidity_fra);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_humidity, 20, 20, 6); tft.drawString("%", 174, 38, 4); 
+    tft.drawString(buf_humidity, 15, 20, 6); tft.drawString("%", 194, 38, 4); 
     step = 6;
     lastDisplayPart = millis();
   }
@@ -243,7 +248,7 @@ void loop() {
     int minHumidity_fra = (int)minHumidity_float;
     sprintf (buf_minHumidity, "%d.%d", minHumidity_int, minHumidity_fra);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_minHumidity, 20, 20, 6); tft.drawString("%", 174, 38, 4); 
+    tft.drawString(buf_minHumidity, 15, 20, 6); tft.drawString("%", 194, 38, 4); 
     tft.drawString("min", 120, 80, 4);
     step = 7;
     lastDisplayPart = millis();
@@ -256,7 +261,7 @@ void loop() {
     int maxHumidity_fra = (int)maxHumidity_float;
     sprintf (buf_maxHumidity, "%d.%d", maxHumidity_int, maxHumidity_fra);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_maxHumidity, 20, 20, 6); tft.drawString("%", 174, 38, 4); 
+    tft.drawString(buf_maxHumidity, 15, 20, 6); tft.drawString("%", 194, 38, 4); 
     tft.drawString("max", 120, 80, 4);
     step = 8;
     lastDisplayPart = millis();
@@ -266,7 +271,7 @@ void loop() {
   if ((millis() - lastDisplayPart > waitRemining + random(waitReminingRandom)) && (step == 8)) {
     sprintf (buf_countUntilClear, "%d", countUntilClear);
     tft.fillScreen(TFT_BLACK);
-    tft.drawString(buf_countUntilClear, 20, 20, 6); tft.drawString("h", 174, 38, 4); 
+    tft.drawString(buf_countUntilClear, 15, 20, 6); tft.drawString("h", 194, 38, 4); 
     step = 9;
     lastDisplayPart = millis();
   }
