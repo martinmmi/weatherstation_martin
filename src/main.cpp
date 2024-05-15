@@ -65,7 +65,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Weatherstation");
 
-  //setCpuFrequencyMhz(80);               // Set CPU Frequenz 240, 160, 80, 40, 20, 10 Mhz
+  setCpuFrequencyMhz(80);               // Set CPU Frequenz 240, 160, 80, 40, 20, 10 Mhz
   
   cpu_frequency = getCpuFrequencyMhz();
   Serial.println(cpu_frequency);
