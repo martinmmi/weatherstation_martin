@@ -45,7 +45,7 @@ int waitLongRandom = 1500;
 int waitRemining = 500;
 int waitReminingRandom = 250;
 int debounceTime = 300;
-int displayOffTime = 60000;
+int displayOffTime = 120000;
 int countUntilClear = 24;
 
 unsigned long lastDisplayPart = 0;
